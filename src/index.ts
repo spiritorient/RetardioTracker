@@ -19,20 +19,24 @@ let connection = new Connection(SOLANA_RPC_URL, "confirmed");
 // --------------------------------
 // Telegram Bot configuration
 // --------------------------------
+// Replace with environment variables in production
 const BOT_TOKEN = "7927451768:AAEfIjHousM73AMxZ-5p0tEwdSiQ-RVidOQ";
 const CHAT_IDS = [
   "7739753477",
 ];
 
+// If tokens or chat IDs are missing, throw
 if (!BOT_TOKEN || CHAT_IDS.length === 0) {
   throw new Error("BOT_TOKEN or CHAT_IDS are missing.");
 }
+
 const bot = new Telegraf(BOT_TOKEN);
 
 // -------------------
 // Wallets to track
 // -------------------
 const WALLET_ADDRESSES = [
+  // Add as many or as few as needed
   "2UWHq9JNxnBi4ehpfivh9crJjG5EuayKCWsH9VuLXPeR",
   "HxjcMB4kfrwmGLZRk3dzwbd6EJJLDTceZgVv6Dw2WoaY",
   "vTR35h5eW75D54ckufYgvtrmCT5dwBYFFcPrfb8kyVm",
@@ -62,19 +66,22 @@ const WALLET_ADDRESSES = [
 ];
 
 // ---------------------------------------------------
-// List of known SWAP or DEX program IDs (example set)
+// Known SWAP or DEX program IDs (example set)
 // ---------------------------------------------------
 const KNOWN_SWAP_PROGRAM_IDS = [
-  // Raydium's AMM program (example; you must verify)
-  "RVKd61ztZW9VYGrgzeXkqUyXTN4C2xz7RtXnYmAB3Jo",
-  // Serum DEX
-  "9xQeWvG816bUx9EPv6gSuE7iEEh7ouE9Z2w2n7aM6bZX",
-  // Jupiter aggregator
-  "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",
-  // Orca swaps
-  "9W5kdiR2b1aGZTVysb3tYZkzDU5QbBhAsCRc5Qugosxh",
-  // ... add more program IDs here as needed
+  "RVKd61ztZW9VYGrgzeXkqUyXTN4C2xz7RtXnYmAB3Jo", // Raydium (example)
+  "9xQeWvG816bUx9EPv6gSuE7iEEh7ouE9Z2w2n7aM6bZX", // Serum DEX
+  "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB", // Jupiter
+  "9W5kdiR2b1aGZTVysb3tYZkzDU5QbBhAsCRc5Qugosxh", // Orca
 ];
+
+// ---------------------------
+// Rate-Limiting (Cool Down)
+// ---------------------------
+// Keep track of when we last fetched data for each wallet
+const lastFetchTime: Record<string, number> = {};
+// Example 5-second cooldown to avoid frequent calls
+const FETCH_COOLDOWN_MS = 5000;
 
 // -----------------------------------------------------
 // Helper function to send Telegram messages
@@ -104,8 +111,10 @@ async function fetchRecentTransactions(walletAddress: string): Promise<string[]>
     }
 
     const recentSignature = signatures[0].signature;
+    // Include maxSupportedTransactionVersion: 0 to avoid version errors
     const transaction = await connection.getParsedTransaction(recentSignature, {
       commitment: "confirmed",
+      maxSupportedTransactionVersion: 0,
     });
 
     if (!transaction) {
@@ -128,18 +137,14 @@ function formatTransactionDetails(tx: ParsedTransactionWithMeta): string[] {
   const feeSOL = feeLamports / 1e9; // Convert lamports to SOL
   const preBalances = meta?.preBalances || [];
   const postBalances = meta?.postBalances || [];
-  const timeString = blockTime 
-    ? new Date(blockTime * 1000).toLocaleString() 
+  const timeString = blockTime
+    ? new Date(blockTime * 1000).toLocaleString()
     : "N/A";
 
-  // Check instructions for known swap program IDs
+  // Detect if swap instructions found
   const instructions = transaction.message.instructions || [];
   let swapDetected = false;
-
   for (const ix of instructions) {
-    // Each `ix` has a `programId` in the "parsed" transaction
-    // but note that for "parsed" transactions, it might be
-    // inside `ix.programId` or `ix.programId.toString()`
     const programIdStr = ix.programId?.toString() || "";
     if (KNOWN_SWAP_PROGRAM_IDS.includes(programIdStr)) {
       swapDetected = true;
@@ -147,10 +152,8 @@ function formatTransactionDetails(tx: ParsedTransactionWithMeta): string[] {
     }
   }
 
-  // Format balances for display
   const preBalancesFormatted = preBalances.map((b: number) => (b / 1e9).toFixed(8));
   const postBalancesFormatted = postBalances.map((b: number) => (b / 1e9).toFixed(8));
-
   const swapStatus = swapDetected ? "YES" : "NO";
 
   return [
@@ -193,9 +196,8 @@ async function fetchTokenBalances(walletAddress: string): Promise<string[]> {
 // --------------------------------------------------------------
 async function monitorConnection() {
   try {
-    // Simple check to ensure the node is responsive
     console.log("[Connection Monitor] Checking connection...");
-    const version = await connection.getVersion(); 
+    const version = await connection.getVersion();
     console.log(`[Connection Monitor] Connected. Solana version: ${version["solana-core"]}`);
   } catch (error) {
     console.error("[Connection Monitor] Connection lost. Attempting to reconnect...");
@@ -210,11 +212,19 @@ async function monitorConnection() {
 async function subscribeToAccountUpdates(walletAddress: string) {
   const publicKey = new PublicKey(walletAddress);
 
-  // onAccountChange triggers every time the account's lamports or data changes
+  // onAccountChange triggers on lamport/data changes
   connection.onAccountChange(publicKey, async (accountInfo: AccountInfo<Buffer>) => {
-    const lamports = accountInfo.lamports;
-    const balance = lamports / 1e9; // Convert lamports to SOL
+    // Rate-limiting check: skip if we fetched too recently
+    const now = Date.now();
+    if (lastFetchTime[walletAddress] && now - lastFetchTime[walletAddress] < FETCH_COOLDOWN_MS) {
+      return; // still in cooldown
+    }
+    lastFetchTime[walletAddress] = now;
 
+    const lamports = accountInfo.lamports;
+    const balance = lamports / 1e9; // convert lamports to SOL
+
+    // Build the message
     let message = `🔔 **Dynamic Update** 🔔
 Wallet: ${walletAddress}
 SOL Balance: ${balance.toFixed(8)} SOL
@@ -268,7 +278,8 @@ async function main() {
     console.log("Wallet tracking initialized.");
 
     // Monitor WebSocket connection periodically
-    setInterval(monitorConnection, 30 * 1000); // Check connection every 30 seconds
+    // Increase to 60 seconds to reduce potential re-subscribe spam
+    setInterval(monitorConnection, 60 * 1000);
   } catch (error) {
     console.error("[Main] Error in tracking:", error);
   }
