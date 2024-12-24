@@ -20,10 +20,13 @@ let connection = new Connection(SOLANA_RPC_URL, "confirmed");
 // Telegram Bot configuration
 // --------------------------------
 const BOT_TOKEN = "7927451768:AAEfIjHousM73AMxZ-5p0tEwdSiQ-RVidOQ";
-const CHAT_ID = "7397808810";
+const CHAT_IDS = [
+  "7397808810",
+  "7739753477"
+];
 
-if (!BOT_TOKEN || !CHAT_ID) {
-  throw new Error("BOT_TOKEN or CHAT_ID is missing.");
+if (!BOT_TOKEN || CHAT_IDS.length === 0) {
+  throw new Error("BOT_TOKEN or CHAT_IDS are missing.");
 }
 const bot = new Telegraf(BOT_TOKEN);
 
@@ -55,8 +58,10 @@ const KNOWN_SWAP_PROGRAM_IDS = [
 // -----------------------------------------------------
 async function sendTelegramMessage(message: string): Promise<void> {
   try {
-    await bot.telegram.sendMessage(CHAT_ID, message);
-    console.log("[Telegram] Message sent successfully.");
+    for (const chatId of CHAT_IDS) {
+      await bot.telegram.sendMessage(chatId, message);
+      console.log(`[Telegram] Message sent successfully to Chat ID: ${chatId}`);
+    }
   } catch (error) {
     console.error("[Telegram] Failed to send message:", error);
   }
