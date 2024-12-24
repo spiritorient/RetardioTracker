@@ -1,42 +1,39 @@
-import { 
-  Connection, 
-  PublicKey, 
-  AccountInfo, 
-  ParsedAccountData, 
-  ParsedTransactionWithMeta 
+import {
+  Connection,
+  PublicKey,
+  AccountInfo,
+  ParsedAccountData,
+  ParsedTransactionWithMeta
 } from "@solana/web3.js";
 import { Telegraf } from "telegraf";
 
-// -------------------
-// Solana configuration
-// -------------------
+// -----------------------------------------------------------------------------
+// 1. Solana Config: Consider using a paid endpoint if you have 25+ wallets
+// -----------------------------------------------------------------------------
 const SOLANA_WS_URL = "wss://api.mainnet-beta.solana.com";
+// Example: const SOLANA_WS_URL = "wss://your_private_endpoint_here";
 const SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com";
+// Example: const SOLANA_RPC_URL = "https://your_private_endpoint_here";
 
-// Create a new connection with "confirmed" commitment
+// Create a new connection
 let connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
-// --------------------------------
-// Telegram Bot configuration
-// --------------------------------
-// Replace with environment variables in production
+// -----------------------------------------------------------------------------
+// 2. Telegram Bot Config
+// -----------------------------------------------------------------------------
 const BOT_TOKEN = "7927451768:AAEfIjHousM73AMxZ-5p0tEwdSiQ-RVidOQ";
-const CHAT_IDS = [
-  "7739753477",
-];
+const CHAT_IDS = ["7739753477"]; // e.g. ["123456789"] or multiple IDs if needed
 
-// If tokens or chat IDs are missing, throw
 if (!BOT_TOKEN || CHAT_IDS.length === 0) {
   throw new Error("BOT_TOKEN or CHAT_IDS are missing.");
 }
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// -------------------
-// Wallets to track
-// -------------------
+// -----------------------------------------------------------------------------
+// 3. Wallet Addresses to Track
+// -----------------------------------------------------------------------------
 const WALLET_ADDRESSES = [
-  // Add as many or as few as needed
   "2UWHq9JNxnBi4ehpfivh9crJjG5EuayKCWsH9VuLXPeR",
   "HxjcMB4kfrwmGLZRk3dzwbd6EJJLDTceZgVv6Dw2WoaY",
   "vTR35h5eW75D54ckufYgvtrmCT5dwBYFFcPrfb8kyVm",
@@ -65,62 +62,63 @@ const WALLET_ADDRESSES = [
   "7eYhqVKWuXQ8mdqYQe12Trhei6X8vHPvfiPeS398k6am"
 ];
 
-// ---------------------------------------------------
-// Known SWAP or DEX program IDs (example set)
-// ---------------------------------------------------
+// -----------------------------------------------------------------------------
+// 4. Known Swap Program IDs (for swap detection)
+// -----------------------------------------------------------------------------
 const KNOWN_SWAP_PROGRAM_IDS = [
-  "RVKd61ztZW9VYGrgzeXkqUyXTN4C2xz7RtXnYmAB3Jo", // Raydium (example)
-  "9xQeWvG816bUx9EPv6gSuE7iEEh7ouE9Z2w2n7aM6bZX", // Serum DEX
-  "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB", // Jupiter
-  "9W5kdiR2b1aGZTVysb3tYZkzDU5QbBhAsCRc5Qugosxh", // Orca
+  "RVKd61ztZW9VYGrgzeXkqUyXTN4C2xz7RtXnYmAB3Jo",
+  "9xQeWvG816bUx9EPv6gSuE7iEEh7ouE9Z2w2n7aM6bZX",
+  "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",
+  "9W5kdiR2b1aGZTVysb3tYZkzDU5QbBhAsCRc5Qugosxh",
 ];
 
-// ---------------------------
-// Rate-Limiting (Cool Down)
-// ---------------------------
-// Keep track of when we last fetched data for each wallet
-const lastFetchTime: Record<string, number> = {};
-// Example 5-second cooldown to avoid frequent calls
-const FETCH_COOLDOWN_MS = 5000;
+// -----------------------------------------------------------------------------
+// 5. Rate-Limiting / Cooldown
+// -----------------------------------------------------------------------------
 
-// -----------------------------------------------------
-// Helper function to send Telegram messages
-// -----------------------------------------------------
-async function sendTelegramMessage(message: string): Promise<void> {
+// We store the last time we fetched each wallet. We'll also queue up changes
+// that happen during the cooldown, so we only fetch once every COOL_DOWN_MS.
+const FETCH_COOLDOWN_MS = 15000; // 15 seconds to be extra cautious
+const lastFetchTime: Record<string, number> = {};
+
+// Optional queue: store “pending changes” for each wallet
+const pendingChanges: Record<string, boolean> = {};
+
+// -----------------------------------------------------------------------------
+// 6. Telegram Messaging Helper
+// -----------------------------------------------------------------------------
+async function sendTelegramMessage(message: string) {
   try {
     for (const chatId of CHAT_IDS) {
       await bot.telegram.sendMessage(chatId, message);
-      console.log(`[Telegram] Message sent successfully to Chat ID: ${chatId}`);
+      console.log(`[Telegram] Message sent successfully to chat ID: ${chatId}`);
     }
   } catch (error) {
     console.error("[Telegram] Failed to send message:", error);
   }
 }
 
-// -----------------------------------------------------------------
-// Fetch the single most recent transaction for a wallet
-// and detect if it is a swap by analyzing the program IDs
-// -----------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 7. Fetch Single Most Recent Transaction, Detect Swap
+// -----------------------------------------------------------------------------
 async function fetchRecentTransactions(walletAddress: string): Promise<string[]> {
   const publicKey = new PublicKey(walletAddress);
-
   try {
     const signatures = await connection.getSignaturesForAddress(publicKey, { limit: 1 });
     if (signatures.length === 0) {
       return ["No recent transactions found."];
     }
-
     const recentSignature = signatures[0].signature;
-    // Include maxSupportedTransactionVersion: 0 to avoid version errors
+
+    // maxSupportedTransactionVersion: 0 to avoid version mismatch
     const transaction = await connection.getParsedTransaction(recentSignature, {
       commitment: "confirmed",
-      maxSupportedTransactionVersion: 0,
+      maxSupportedTransactionVersion: 0
     });
 
     if (!transaction) {
       return ["Unable to fetch transaction details."];
     }
-
     return formatTransactionDetails(transaction);
   } catch (error) {
     console.error(`Failed to fetch transactions for ${walletAddress}:`, error);
@@ -128,32 +126,28 @@ async function fetchRecentTransactions(walletAddress: string): Promise<string[]>
   }
 }
 
-// ---------------------------------------------------------
-// Format transaction details and detect if a swap occurred
-// ---------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 8. Format Transaction Details & Detect Swaps
+// -----------------------------------------------------------------------------
 function formatTransactionDetails(tx: ParsedTransactionWithMeta): string[] {
   const { slot, transaction, meta, blockTime } = tx;
   const feeLamports = meta?.fee ?? 0;
-  const feeSOL = feeLamports / 1e9; // Convert lamports to SOL
+  const feeSOL = feeLamports / 1e9;
   const preBalances = meta?.preBalances || [];
   const postBalances = meta?.postBalances || [];
-  const timeString = blockTime
-    ? new Date(blockTime * 1000).toLocaleString()
-    : "N/A";
+  const timeString = blockTime ? new Date(blockTime * 1000).toLocaleString() : "N/A";
 
-  // Detect if swap instructions found
   const instructions = transaction.message.instructions || [];
   let swapDetected = false;
   for (const ix of instructions) {
-    const programIdStr = ix.programId?.toString() || "";
-    if (KNOWN_SWAP_PROGRAM_IDS.includes(programIdStr)) {
+    if (KNOWN_SWAP_PROGRAM_IDS.includes(ix.programId?.toString() || "")) {
       swapDetected = true;
       break;
     }
   }
 
-  const preBalancesFormatted = preBalances.map((b: number) => (b / 1e9).toFixed(8));
-  const postBalancesFormatted = postBalances.map((b: number) => (b / 1e9).toFixed(8));
+  const preBalancesFormatted = preBalances.map((b) => (b / 1e9).toFixed(8));
+  const postBalancesFormatted = postBalances.map((b) => (b / 1e9).toFixed(8));
   const swapStatus = swapDetected ? "YES" : "NO";
 
   return [
@@ -166,34 +160,30 @@ function formatTransactionDetails(tx: ParsedTransactionWithMeta): string[] {
   ];
 }
 
-// --------------------------------------------------------------
-// Fetch token balances for a wallet
-// --------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 9. Fetch Token Balances
+// -----------------------------------------------------------------------------
 async function fetchTokenBalances(walletAddress: string): Promise<string[]> {
   const publicKey = new PublicKey(walletAddress);
-
   const tokenAccounts = await connection.getTokenAccountsByOwner(publicKey, {
     programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
   });
 
-  const tokenBalances: string[] = [];
+  const balances: string[] = [];
   for (const accountInfo of tokenAccounts.value) {
-    const parsedData = await connection.getParsedAccountInfo(
-      new PublicKey(accountInfo.pubkey)
-    );
+    const parsedData = await connection.getParsedAccountInfo(new PublicKey(accountInfo.pubkey));
     const parsedInfo = (parsedData?.value?.data as ParsedAccountData)?.parsed?.info;
     if (parsedInfo) {
       const { mint, tokenAmount } = parsedInfo;
-      tokenBalances.push(`Token: ${mint}, Balance: ${tokenAmount.uiAmountString}`);
+      balances.push(`Token: ${mint}, Balance: ${tokenAmount.uiAmountString}`);
     }
   }
-
-  return tokenBalances;
+  return balances;
 }
 
-// --------------------------------------------------------------
-// Monitor WebSocket connection and handle disconnection
-// --------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 10. Connection Monitor for WebSocket
+// -----------------------------------------------------------------------------
 async function monitorConnection() {
   try {
     console.log("[Connection Monitor] Checking connection...");
@@ -202,59 +192,72 @@ async function monitorConnection() {
   } catch (error) {
     console.error("[Connection Monitor] Connection lost. Attempting to reconnect...");
     connection = new Connection(SOLANA_RPC_URL, "confirmed");
-    await startTrackingWallets(); // re-subscribe to account updates
+    await startTrackingWallets(); // re-subscribe
   }
 }
 
-// --------------------------------------------------------------
-// Subscribe to account updates via WebSocket
-// --------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 11. Subscribe to Account Updates
+// -----------------------------------------------------------------------------
 async function subscribeToAccountUpdates(walletAddress: string) {
   const publicKey = new PublicKey(walletAddress);
 
-  // onAccountChange triggers on lamport/data changes
   connection.onAccountChange(publicKey, async (accountInfo: AccountInfo<Buffer>) => {
-    // Rate-limiting check: skip if we fetched too recently
+    // Mark that this wallet had a change
+    pendingChanges[walletAddress] = true;
+
+    // We’ll do a small “delay” approach: if we’re within cooldown, skip immediate fetch
     const now = Date.now();
-    if (lastFetchTime[walletAddress] && now - lastFetchTime[walletAddress] < FETCH_COOLDOWN_MS) {
-      return; // still in cooldown
-    }
-    lastFetchTime[walletAddress] = now;
+    const lastTime = lastFetchTime[walletAddress] || 0;
+    const sinceLast = now - lastTime;
 
-    const lamports = accountInfo.lamports;
-    const balance = lamports / 1e9; // convert lamports to SOL
-
-    // Build the message
-    let message = `🔔 **Dynamic Update** 🔔
-Wallet: ${walletAddress}
-SOL Balance: ${balance.toFixed(8)} SOL
-`;
-
-    // Fetch token balances
-    try {
-      const tokenBalances = await fetchTokenBalances(walletAddress);
-      message += `\nToken Balances:\n${tokenBalances.join("\n")}`;
-    } catch (error) {
-      console.error(`[onAccountChange] Failed to fetch token balances for ${walletAddress}:`, error);
+    if (sinceLast < FETCH_COOLDOWN_MS) {
+      // Wait until cooldown is over
+      return;
     }
 
-    // Fetch recent transaction details
-    try {
-      const transactionDetails = await fetchRecentTransactions(walletAddress);
-      message += `\nRecent Transaction Details:\n${transactionDetails.join("\n")}`;
-    } catch (error) {
-      console.error(`[onAccountChange] Failed to fetch recent transactions for ${walletAddress}:`, error);
-    }
-
-    // Log and send the update to Telegram
-    console.log(message);
-    await sendTelegramMessage(message);
+    // If the cooldown is passed, do the fetch
+    await doFetchAndSendMessage(walletAddress, accountInfo.lamports);
   });
 }
 
-// --------------------------------------------------------------
-// Start tracking wallets
-// --------------------------------------------------------------
+/**
+ * Actually fetch data and send Telegram message.
+ */
+async function doFetchAndSendMessage(walletAddress: string, lamports: number) {
+  // Reset the last fetch time
+  lastFetchTime[walletAddress] = Date.now();
+  pendingChanges[walletAddress] = false; // we’re about to process it
+
+  const balanceSOL = lamports / 1e9;
+  let message = `🔔 **Dynamic Update** 🔔
+Wallet: ${walletAddress}
+SOL Balance: ${balanceSOL.toFixed(8)} SOL
+`;
+
+  // Fetch token balances
+  try {
+    const tokenBalances = await fetchTokenBalances(walletAddress);
+    message += `\nToken Balances:\n${tokenBalances.join("\n")}`;
+  } catch (error) {
+    console.error(`[onAccountChange] Failed to fetch token balances for ${walletAddress}:`, error);
+  }
+
+  // Fetch recent transactions
+  try {
+    const transactionDetails = await fetchRecentTransactions(walletAddress);
+    message += `\nRecent Transaction Details:\n${transactionDetails.join("\n")}`;
+  } catch (error) {
+    console.error(`[onAccountChange] Failed to fetch recent transactions for ${walletAddress}:`, error);
+  }
+
+  console.log(message);
+  await sendTelegramMessage(message);
+}
+
+// -----------------------------------------------------------------------------
+// 12. Start Tracking Wallets
+// -----------------------------------------------------------------------------
 async function startTrackingWallets() {
   console.log("[Tracker] Attempting to subscribe to wallet updates...");
 
@@ -268,24 +271,20 @@ async function startTrackingWallets() {
   }
 }
 
-// --------------------------------------------------------------
-// Main function
-// --------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 13. Main Entry Point
+// -----------------------------------------------------------------------------
 async function main() {
   try {
     console.log("Starting Solana Wallet Tracker...");
     await startTrackingWallets();
     console.log("Wallet tracking initialized.");
 
-    // Monitor WebSocket connection periodically
-    // Increase to 60 seconds to reduce potential re-subscribe spam
-    setInterval(monitorConnection, 60 * 1000);
+    // Check connection every 60 seconds
+    setInterval(monitorConnection, 60_000);
   } catch (error) {
     console.error("[Main] Error in tracking:", error);
   }
 }
 
-// --------------------------------------------------------------
-// Run the main entry point
-// --------------------------------------------------------------
 main();
