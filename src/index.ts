@@ -21,8 +21,7 @@ let connection = new Connection(SOLANA_RPC_URL, "confirmed");
 // --------------------------------
 const BOT_TOKEN = "7927451768:AAEfIjHousM73AMxZ-5p0tEwdSiQ-RVidOQ";
 const CHAT_IDS = [
-  "7397808810",
-  "7739753477"
+  "7739753477",
 ];
 
 if (!BOT_TOKEN || CHAT_IDS.length === 0) {
