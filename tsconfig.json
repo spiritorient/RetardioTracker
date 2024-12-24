@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "es2020",                                  /* Use a modern version of JavaScript for your emitted code. */
+    "lib": ["es2020"],                                   /* Include library definitions for ES2020. */
+
+    /* Modules */
+    "module": "commonjs",                                /* Use CommonJS for module code (compatible with Node.js). */
+    "rootDir": "./src",                                  /* Set the root directory for your source files. */
+    "outDir": "./dist",                                  /* Specify the output folder for compiled JavaScript files. */
+
+    /* Interop Constraints */
+    "esModuleInterop": true,                             /* Enable interop with CommonJS modules. */
+    "forceConsistentCasingInFileNames": true,            /* Ensure imports have consistent casing. */
+
+    /* Type Checking */
+    "strict": true,                                      /* Enable strict type-checking. */
+    "skipLibCheck": true                                 /* Skip type-checking library declaration files for faster builds. */
+  },
+  "include": ["src/**/*"],                               /* Include all TypeScript files in the 'src' folder. */
+  "exclude": ["node_modules", "dist"]                    /* Exclude the output and dependencies folders. */
+}
