@@ -1,11 +1,8 @@
 import { Connection, PublicKey, AccountInfo, ParsedAccountData } from "@solana/web3.js";
-import * as dotenv from "dotenv";
 import { Telegraf } from "telegraf";
 
-// Load environment variables from .env
-dotenv.config();
-
 // Solana configuration
+const SOLANA_WS_URL = "wss://api.mainnet-beta.solana.com";
 const SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com";
 let connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
@@ -13,7 +10,7 @@ let connection = new Connection(SOLANA_RPC_URL, "confirmed");
 const BOT_TOKEN = "7927451768:AAEfIjHousM73AMxZ-5p0tEwdSiQ-RVidOQ";
 const CHAT_ID = "7397808810";
 if (!BOT_TOKEN || !CHAT_ID) {
-  throw new Error("BOT_TOKEN or CHAT_ID is missing. Check your .env file.");
+  throw new Error("BOT_TOKEN or CHAT_ID is missing.");
 }
 const bot = new Telegraf(BOT_TOKEN);
 
@@ -22,12 +19,6 @@ const WALLET_ADDRESSES = [
   "2UWHq9JNxnBi4ehpfivh9crJjG5EuayKCWsH9VuLXPeR",
   "AEHqTB2RtJjegsR2ePjvoJSm6AA5pnYKWVbcsn6kqTBD",
 ];
-
-// Known Swap Program IDs
-const SWAP_PROGRAM_IDS = {
-  Orca: "9Ww2cPQwYBr0e8p2DGUK7LtGyDRq8d4ohMp4sd8qaCcF",
-  Raydium: "4xqjzMwqDjoktf5Qj4cKN5VcRMZHXw6tucTD65xoCA5y",
-};
 
 // Helper function to send Telegram messages
 async function sendTelegramMessage(message: string): Promise<void> {
@@ -55,26 +46,21 @@ async function fetchRecentTransactions(walletAddress: string): Promise<string[]>
     });
 
     if (transaction) {
-      const { slot, meta, transaction: tx } = transaction;
+      const { slot, meta } = transaction;
       const fee = meta?.fee ? meta.fee / 1e9 : 0; // Convert lamports to SOL
+      const preBalances = meta?.preBalances || [];
+      const postBalances = meta?.postBalances || [];
       const blockTime = transaction.blockTime ? new Date(transaction.blockTime * 1000).toLocaleString() : "N/A";
 
-      let swapDetails = "No swap detected.";
-
-      // Detect and parse SWAP instructions
-      for (const instr of tx.message.instructions) {
-        const programId = instr.programId.toString();
-        if (Object.values(SWAP_PROGRAM_IDS).includes(programId)) {
-          swapDetails = parseSwapInstruction(instr, programId);
-          break;
-        }
-      }
+      const preBalancesFormatted = preBalances.map((b: number) => (b / 1e9).toFixed(8));
+      const postBalancesFormatted = postBalances.map((b: number) => (b / 1e9).toFixed(8));
 
       return [
         `Slot: ${slot}`,
         `Timestamp: ${blockTime}`,
         `Fee: ${fee.toFixed(8)} SOL`,
-        `Swap Details: ${swapDetails}`,
+        `Pre-Transaction Balances: ${preBalancesFormatted.join(", ")}`,
+        `Post-Transaction Balances: ${postBalancesFormatted.join(", ")}`,
       ];
     } else {
       return ["Unable to fetch transaction details."];
@@ -82,22 +68,6 @@ async function fetchRecentTransactions(walletAddress: string): Promise<string[]>
   } catch (error) {
     console.error(`Failed to fetch transactions for ${walletAddress}:`, error);
     return ["Error fetching transaction details."];
-  }
-}
-
-// Parse swap instruction for details
-function parseSwapInstruction(instruction: any, programId: string): string {
-  try {
-    const parsed = instruction.parsed || {};
-    const source = parsed.info.source;
-    const destination = parsed.info.destination;
-    const amountIn = parsed.info.amountIn / 1e9; // Convert lamports to SOL
-    const amountOut = parsed.info.amountOut / 1e9; // Convert lamports to SOL
-
-    return `Swap detected on program: ${programId}\nSource: ${source}\nDestination: ${destination}\nAmount In: ${amountIn} SOL\nAmount Out: ${amountOut} SOL`;
-  } catch (error) {
-    console.error("Error parsing swap instruction:", error);
-    return "Error parsing swap details.";
   }
 }
 
@@ -119,6 +89,19 @@ async function fetchTokenBalances(walletAddress: string): Promise<string[]> {
   }
 
   return tokenBalances;
+}
+
+// Monitor WebSocket and handle disconnection
+async function monitorConnection() {
+  try {
+    console.log("Monitoring WebSocket connection...");
+    const version = await connection.getVersion(); // A test call to confirm connection
+    console.log(`Connection is valid. Solana version: ${version["solana-core"]}`);
+  } catch (error) {
+    console.error("Connection lost. Attempting to reconnect...");
+    connection = new Connection(SOLANA_RPC_URL, "confirmed"); // Reinitialize connection
+    await startTrackingWallets(); // Restart wallet tracking
+  }
 }
 
 // Subscribe to account updates via WebSocket
@@ -156,7 +139,11 @@ async function startTrackingWallets() {
 
   for (const walletAddress of WALLET_ADDRESSES) {
     console.log(`Subscribing to updates for wallet: ${walletAddress}`);
-    await subscribeToAccountUpdates(walletAddress);
+    try {
+      await subscribeToAccountUpdates(walletAddress);
+    } catch (error) {
+      console.error(`Error during subscription for wallet ${walletAddress}:`, error);
+    }
   }
 }
 
@@ -165,6 +152,9 @@ async function main() {
   console.log("Starting Solana Wallet Tracker...");
   await startTrackingWallets();
   console.log("Wallet tracking initialized.");
+
+  // Monitor WebSocket connection periodically
+  setInterval(monitorConnection, 30 * 1000); // Check connection every 30 seconds
 }
 
 main().catch((error) => console.error("Error in tracking:", error));
