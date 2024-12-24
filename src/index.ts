@@ -35,7 +35,6 @@ const bot = new Telegraf(BOT_TOKEN);
 // -------------------
 const WALLET_ADDRESSES = [
   "2UWHq9JNxnBi4ehpfivh9crJjG5EuayKCWsH9VuLXPeR",
-  "AEHqTB2RtJjegsR2ePjvoJSm6AA5pnYKWVbcsn6kqTBD",
   "HxjcMB4kfrwmGLZRk3dzwbd6EJJLDTceZgVv6Dw2WoaY",
   "vTR35h5eW75D54ckufYgvtrmCT5dwBYFFcPrfb8kyVm",
   "DSt7xDwaibMXDAnym7j5WdThwqcm1mQPA3JoKriH6Bqi",
