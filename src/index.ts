@@ -44,22 +44,7 @@ const WALLET_ADDRESSES = [
   "Fc5rnJJDk8a8kN3MnoSJZy4Fn3B9QAD79XQCsWckZRYu",
   "Gk17RVYvVi7kWzQXayUDKpvLwPbQYG7YBnUJaGLvRqrb",
   "DSt7xDwaibMXDAnym7j5WdThwqcm1mQPA3JoKriH6Bqi",
-  "9mKN5zoWJLDNNqGRnRKDmgJ8gDNFuZv3JKcTsnEN3uJJ",
-  "5zReCULLatoDq4XtU24jvFvUqseSyRcFpVhh3YF1io91",
-  "FDFErfrXujhXraizjEVB8mgWQHwyC1dSkEKH8GB7HMbp",
-  "CL3fhHsrB2WhntaX7ME3wBPgLNfxsG1iFhmgc4szjP2d",
-  "AwAorTYrqDzKhpeRZx4LdMuRsaHQJu6kcAR7rC47DqsT",
-  "HtXdfW9U4jp8524cyw2jAQfMPiff5WYdSLnozF3sEbYi",
-  "4PseMpW7s7HnfkAd6DzJqwtPtNxXBGokzWHDgJc1i3k8",
-  "ALFWv3NjES1AvjaYKAp9BzpyiWVYpJWnNWsA3xiExwvk",
-  "EZqKNT6bgg4zET43fkusnVMcVEBrx8CqxJupsVheTiN3",
-  "H91Y4q87bbctbH9SNiHrATQo2W4nvagbyPXMhFnFtDvQ",
-  "5RZivXzyW9LMsX9Uw9Gh6sZzSkkzGt9xzy3EjTVmVCvM",
-  "cvP9pZDXYHF9gdzc7wQsiEkAjVpAF9CJD51j8AfqZur",
-  "9rnja4tnmcAkFbTPfw9TfCdxa4DHwNFSYbtYhGWGbsu8",
-  "CXHP5cLsp1foLMJwt7oQWVKHKNKx1YYr9VdKBLguyAvB",
-  "2oNKbow4aHX5rbNsPUA69QE2yjuxV86vJ9MLYsTZbS1U",
-  "7eYhqVKWuXQ8mdqYQe12Trhei6X8vHPvfiPeS398k6am"
+  "9mKN5zoWJLDNNqGRnRKDmgJ8gDNFuZv3JKcTsnEN3uJJ"
 ];
 
 // -----------------------------------------------------------------------------
